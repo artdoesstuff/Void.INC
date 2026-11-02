@@ -156,7 +156,7 @@ namespace Tween {
     }
 }
 
-enum class FolderID { Stats, Upgrades, Fragment, Market, None };
+enum class FolderID { Stats, Upgrades, Fragment, Market, Infra, None };
 
 struct FolderTab {
     FolderID    id;
@@ -188,6 +188,7 @@ struct RateSmoother {
 
 class Hud {
 public:
+    // ---- Constants -------------------------------------------------------
     static constexpr float kScreenW      = 1280.f;
     static constexpr float kScreenH      = 720.f;
     static constexpr float kSpiralBound  = 640.f;  ///< Panel never crosses this X
@@ -207,6 +208,7 @@ public:
             { FolderID::Upgrades,  "SUPPORT",  Palette::IV_Purple },
             { FolderID::Market,    "MARKET",   Palette::IV_Green  },
             { FolderID::Fragment,  "FRAGMENT", Palette::IV_Gold   },
+            { FolderID::Infra,     "INFRA",    Palette::IV_Cyan   },
         };
 
         // Resume the stock/Voidcoin markets from where they were last saved,
@@ -268,6 +270,9 @@ public:
     [[nodiscard]] const Probe& probeFragment() const { return probeFragment_; }
     [[nodiscard]] const Probe& probeConfirm()  const { return probeConfirm_;  }
     [[nodiscard]] const Probe& probePerk()     const { return probePerk_;     }
+    [[nodiscard]] const Probe& probeInfraCell(size_t i) const { return i < probeInfraCells_.size() ? probeInfraCells_[i] : kNoProbe_; }
+    [[nodiscard]] const Probe& probeInfraPalette(size_t k) const { return k < probeInfraPal_.size() ? probeInfraPal_[k] : kNoProbe_; }
+    [[nodiscard]] const Probe& probeInfraExpand() const { return probeInfraExpand_; }
     [[nodiscard]] const Probe& probeResearch() const { return probeResearch_; }
     [[nodiscard]] const Probe& probeGlitch()   const { return probeGlitch_;   }
 
@@ -281,6 +286,11 @@ private:
     Probe probeConfirm_;
     Probe probePerk_;
     Probe probeResearch_;
+    std::vector<Probe> probeInfraCells_;
+    std::vector<Probe> probeInfraPal_;
+    Probe probeInfraExpand_;
+    Probe kNoProbe_;
+    int   infraSel_ = 0;          // palette selection; -1 = demolish
     Probe probeGlitch_;
     int   supportTabRequest_ = -1;
     int   marketTabRequest_ = -1;   // sub-tab to force-select next frame, -1 = none
@@ -322,6 +332,7 @@ private:
         switch (id) {
             case FolderID::Market:   return gs.marketUnlocked;
             case FolderID::Fragment: return gs.fragmentUnlocked;
+            case FolderID::Infra:    return gs.infraUnlocked;
             default:                 return true;
         }
     }
@@ -428,6 +439,7 @@ private:
         else if (activeFolder_ == FolderID::Upgrades) title = "// SUPPORT";
         else if (activeFolder_ == FolderID::Fragment)  title = "// FRAGMENT";
         else if (activeFolder_ == FolderID::Market)    title = "// VOIDCOIN EXCHANGE";
+        else if (activeFolder_ == FolderID::Infra)     title = "// INFRASTRUCTURE";
 
         ImGui::TextColored(Palette::IV_Cyan, "%s", title);
         ImGui::Separator();
@@ -438,6 +450,7 @@ private:
             case FolderID::Upgrades: drawUpgradesContent(gs); break;
             case FolderID::Fragment: drawFragmentContent(gs); break;
             case FolderID::Market:   drawMarketContent(gs);   break;
+            case FolderID::Infra:    drawInfraContent(gs);    break;
             default: break;
         }
 
@@ -852,6 +865,102 @@ private:
             if (glitchActive(gs, i))
                 ImGui::TextColored(Palette::IV_Red, "%s  %s", glitches[i].name.c_str(), fmtClock(glitchRemaining(gs, i)).c_str());
         ImGui::End();
+    }
+
+    void drawInfraContent(GameState& gs) {
+        ensureInfraGrid(gs);
+        const int  n   = gs.infraSize;
+        const double sup = powerSupply(gs), dem = powerDemand(gs), eff = powerEfficiency(gs);
+        const auto fmtCr = [](double v) { return ErisNum::ErisNum(v).toString(ErisNum::FormatMode::LatinShort, 2); };
+
+        ImGui::TextColored(Palette::IV_Gold, "CREDITS  %s", gs.credits.toString(ErisNum::FormatMode::LatinShort, 2).c_str());
+        ImGui::TextColored(eff >= 1.0 ? Palette::IV_Green : Palette::IV_Red,
+            "POWER  %.0f / %.0f   efficiency %.0f%%", sup, dem, eff * 100.0);
+        if (eff < 1.0) ImGui::TextColored(Palette::IV_Red, "Underpowered: machine bonuses are scaled down. Build generators.");
+        ImGui::Separator();
+
+        probeInfraCells_.assign(static_cast<size_t>(n) * n, Probe{});
+        probeInfraPal_.assign(infraKinds.size(), Probe{});
+        probeInfraExpand_ = Probe{};
+
+        ImGui::BeginChild("##infrapal", {290.f, 0.f}, ImGuiChildFlags_Borders);
+        for (size_t k = 0; k < infraKinds.size(); ++k) {
+            const InfraKind& ik = infraKinds[k];
+            const double cost = infraCost(gs, k);
+            const bool afford = gs.credits >= ErisNum::ErisNum(cost);
+            ImGui::PushID(static_cast<int>(k));
+            const bool sel = infraSel_ == static_cast<int>(k);
+            ImGui::PushStyleColor(ImGuiCol_Button, sel ? Palette::IV_CyanDim : Palette::IV_Transparent);
+            char label[96];
+            std::snprintf(label, sizeof(label), "%s  x%zu##pal", ik.name.c_str(), infraCount(gs, k));
+            if (ImGui::Button(label, {-1.f, 0.f})) infraSel_ = static_cast<int>(k);
+            probeInfraPal_[k] = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+            ImGui::PopStyleColor();
+            ImGui::TextColored(afford ? Palette::IV_Gold : Palette::IV_TextDim, "  %s CR", fmtCr(cost).c_str());
+            if (ik.effect == InfraEffect::POWER) { ImGui::SameLine(); ImGui::TextColored(Palette::IV_Green, "+%.0f power", ik.value); }
+            else                                  { ImGui::SameLine(); ImGui::TextColored(Palette::IV_TextDim, "-%.0f power", ik.power); }
+            ImGui::TextColored(Palette::IV_TextDim, "  %s", ik.desc.c_str());
+            ImGui::PopID();
+        }
+        ImGui::PushStyleColor(ImGuiCol_Button, infraSel_ == -1 ? Palette::IV_CyanDim : Palette::IV_Transparent);
+        if (ImGui::Button("DEMOLISH (50% refund)##dem", {-1.f, 0.f})) infraSel_ = -1;
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##infragrid", {0.f, 0.f}, ImGuiChildFlags_Borders);
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float cell  = std::min(40.f, (avail - 4.f * (n - 1)) / n);
+        for (int r = 0; r < n; ++r) {
+            for (int c = 0; c < n; ++c) {
+                const size_t idx = static_cast<size_t>(r) * n + c;
+                const uint8_t v  = gs.infraCells[idx];
+                if (c) ImGui::SameLine(0.f, 4.f);
+                ImGui::PushID(static_cast<int>(idx));
+                const char* lab = v ? infraKinds[v - 1u].name.c_str() : "";
+                char txt[8] = "";
+                if (v) { txt[0] = lab[0]; txt[1] = '\0'; }
+                ImGui::PushStyleColor(ImGuiCol_Button, v ? Palette::IV_CyanDim : Palette::IV_Transparent);
+                if (ImGui::Button((std::string(txt) + "##cell").c_str(), {cell, cell})) {
+                    if (infraSel_ == -1) demolishBuilding(gs, idx);
+                    else if (!v)         placeBuilding(gs, idx, static_cast<size_t>(infraSel_));
+                }
+                ImGui::PopStyleColor();
+                probeInfraCells_[idx] = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+                if (ImGui::IsItemHovered() && v) ImGui::SetTooltip("%s", lab);
+                ImGui::PopID();
+            }
+        }
+        ImGui::Spacing();
+        if (canExpand(gs)) {
+            const double ec = expandCost(gs);
+            const bool can = gs.credits >= ErisNum::ErisNum(ec);
+            if (!can) ImGui::BeginDisabled();
+            char b[64];
+            std::snprintf(b, sizeof(b), "EXPAND %dx%d  -  %s CR##expand", n + 1, n + 1, fmtCr(ec).c_str());
+            if (ImGui::Button(b, {-1.f, 0.f})) expandGrid(gs);
+            probeInfraExpand_ = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+            if (!can) ImGui::EndDisabled();
+        } else {
+            ImGui::TextColored(Palette::IV_TextDim, "Grid at maximum size.");
+        }
+
+        // Automation toggles appear once the building exists.
+        if (infraHas(gs, InfraEffect::AUTO_SUPPORTS) || infraHas(gs, InfraEffect::AUTO_GLITCHES)) {
+            ImGui::Separator();
+            ImGui::TextColored(Palette::IV_Cyan, "AUTOMATION");
+            if (infraHas(gs, InfraEffect::AUTO_SUPPORTS))
+                ImGui::Checkbox("Auto-install Supports", &gs.autoSupports);
+            if (infraHas(gs, InfraEffect::AUTO_GLITCHES)) {
+                for (size_t i = 0; i < glitches.size(); ++i) {
+                    bool on = Flags::get(gs.glitchAutoFlags, i);
+                    const std::string l = "Keep " + glitches[i].name + " running##ag" + std::to_string(i);
+                    if (ImGui::Checkbox(l.c_str(), &on)) Flags::set(gs.glitchAutoFlags, i, on);
+                }
+            }
+        }
+        ImGui::EndChild();
     }
 
     void drawSupportGrid(GameState& gs) {

@@ -14,6 +14,7 @@
 #include "FragmentTree.hpp"
 #include "Research.hpp"
 #include "Glitches.hpp"
+#include "Infrastructure.hpp"
 #include "CreditMarket.hpp"
 
 namespace GameMechanics {
@@ -51,9 +52,31 @@ namespace GameMechanics {
         ErisNum::ErisNum base   = ErisNum::ErisNum(BASE_DATA_RATE) * (ErisNum::ErisNum(1.0) + logVal * ErisNum::ErisNum(0.5));
         return base * supportBoost(RESOURCE::BOOST::DATA)
                     * ErisNum::ErisNum(glitchMult(gs, GlitchEffect::DATA_PROD))
+                    * ErisNum::ErisNum(infraMult(gs, InfraEffect::DATA_PROD))
                     * ErisNum::ErisNum(static_cast<double>(dataProdPerkMult()))
                     * ErisNum::ErisNum(treeDataMult())
                     * fragmentBoost(gs);
+    }
+
+    // Automation (Autoloader / Glitch Scheduler). Runs every AUTO_PERIOD seconds.
+    inline void runAutomation(GameState& gs) {
+        if (gs.autoSupports && infraHas(gs, InfraEffect::AUTO_SUPPORTS)) {
+            for (size_t i = 0; i < supports.size(); ++i)          // cheapest-first order of the list
+                if (!supports[i].installed && canAffordSupport(supports[i], gs)) {
+                    installSupport(supports, gs, i);
+                    break;                                          // one per pass
+                }
+        }
+        if (infraHas(gs, InfraEffect::AUTO_GLITCHES)) {
+            ensureGlitchTimers(gs);
+            const double dm = researchGlitchDurMult();
+            for (size_t i = 0; i < glitches.size(); ++i) {
+                if (!Flags::get(gs.glitchAutoFlags, i)) continue;
+                // Re-buy once less than one full duration remains: never wastes time at the cap.
+                if (glitchRemaining(gs, i) < glitches[i].seconds * dm * 0.5 && canBuyGlitch(gs, i, dm))
+                    buyGlitch(gs, i, dm);
+            }
+        }
     }
 
     inline void tick(GameState& gs, double dt) {
@@ -61,6 +84,8 @@ namespace GameMechanics {
 
         tickGlitches(gs, dt);
         tickResearch(gs, dt);
+        gs.autoTimer += dt;
+        if (gs.autoTimer >= InfraRules::AUTO_PERIOD) { gs.autoTimer = 0.0; runAutomation(gs); }
 
         ErisNum::ErisNum produced = dataRate(gs) * ErisNum::ErisNum(dt);
         gs.data              += produced;
@@ -75,6 +100,7 @@ namespace GameMechanics {
         ErisNum::ErisNum converted = produced * ErisNum::ErisNum(0.5);
         ErisNum::ErisNum grossInfo = converted * supportBoost(RESOURCE::BOOST::INFORMATION)
                                                 * ErisNum::ErisNum(glitchMult(gs, GlitchEffect::INFO_PROD))
+                                                * ErisNum::ErisNum(infraMult(gs, InfraEffect::INFO_PROD))
                                                 * ErisNum::ErisNum(static_cast<double>(infoProdPerkMult()))
                                                 * ErisNum::ErisNum(treeInfoMult());
 
@@ -93,6 +119,7 @@ namespace GameMechanics {
             // ENTROPY supports/perks/tree boost only the amount of Entropy
             // recovered from the intercepted slice.
             ErisNum::ErisNum entropyGain = intercepted * ErisNum::ErisNum(0.2) * supportBoost(RESOURCE::BOOST::ENTROPY)
+                                                        * ErisNum::ErisNum(infraMult(gs, InfraEffect::ENTROPY_PROD))
                                                         * ErisNum::ErisNum(static_cast<double>(entropyProdPerkMult()))
                                                         * ErisNum::ErisNum(treeEntropyMult());
             gs.entropy              += entropyGain;
@@ -169,6 +196,7 @@ namespace GameMechanics {
         if (!std::isfinite(gs.voidRate)) gs.voidRate = 0.0;
         gs.voidRate = std::clamp(gs.voidRate, 0.0, VOID_RATE_HARD_MAX);
         if (!std::isfinite(gs.stockScale) || gs.stockScale < 1.0) gs.stockScale = 1.0;
+        ensureInfraGrid(gs);
         ensureGlitchTimers(gs);
         for (double& t : gs.glitchTimers)
             if (!std::isfinite(t) || t < 0.0) t = 0.0;
@@ -183,6 +211,7 @@ namespace GameMechanics {
     //   Market   : Data or Information could be sold for >= 1 Credit
     //   Fragment : a Fragmentation would yield >= 1 Fragment
     inline void updateUnlocks(GameState& gs) {
+        ensureInfraGrid(gs);
         const ErisNum::ErisNum zero(0.0);
         if (!gs.marketUnlocked &&
             (tradeValueReachesOneCredit(gs) || gs.allCreditProduced > zero))
@@ -191,6 +220,8 @@ namespace GameMechanics {
         if (!gs.fragmentUnlocked &&
             (canFragment(gs) || gs.allDataFragments > zero || gs.fragmentation > zero))
             gs.fragmentUnlocked = true;
+
+        if (!gs.infraUnlocked && infraWorthShowing(gs)) gs.infraUnlocked = true;
 
         // Research: something to research is affordable (or already underway/done).
         if (!gs.researchUnlocked && researchWorthShowing(gs)) gs.researchUnlocked = true;

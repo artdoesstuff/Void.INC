@@ -8,24 +8,24 @@
 struct GameState {
     // Written first. A file whose magic/version differ is never loaded as a
     // live save; GameMechanics::loadOrNew quarantines it instead.
-    // Bump kSaveVersion whenever the field list or flag ordering changes
+    // Bump kSaveVersion whenever the field list or flag ordering changes.
     static constexpr uint32_t kSaveMagic   = 0x44494F56u; // "VOID"
-    static constexpr uint32_t kSaveVersion = 4u;
+    static constexpr uint32_t kSaveVersion = 5u;
     uint32_t saveMagic   = kSaveMagic;
     uint32_t saveVersion = kSaveVersion;
 
     ErisNum::ErisNum credits        = ErisNum::ErisNum(0.0);
 
-    ErisNum::ErisNum data           = ErisNum::ErisNum(9999999999999999.0);
-    ErisNum::ErisNum information    = ErisNum::ErisNum(9999999999999999.0);
-    ErisNum::ErisNum entropy        = ErisNum::ErisNum(9999999999999999.0);
+    ErisNum::ErisNum data           = ErisNum::ErisNum(0.0);
+    ErisNum::ErisNum information    = ErisNum::ErisNum(0.0);
+    ErisNum::ErisNum entropy        = ErisNum::ErisNum(0.0);
 
     ErisNum::ErisNum dataFragments  = ErisNum::ErisNum(0.0);
     ErisNum::ErisNum fragmentEchoes = ErisNum::ErisNum(0.0);
     ErisNum::ErisNum dataAxioms     = ErisNum::ErisNum(0.0);
     ErisNum::ErisNum null           = ErisNum::ErisNum(0.0);
 
-    ErisNum::ErisNum heat           = ErisNum::ErisNum(0.0); // Offline-only currency (kelvin): accumulates while offline, spent to run the game at 5x speed (~11.9K per second). Cap 2,500 K, upgradable
+    ErisNum::ErisNum heat           = ErisNum::ErisNum(0.0); // Offline-only currency (kelvin): accumulates while offline, spent to run the game at 5x speed (~11.9K per second). Cap 2,500 K, upgradable.
     ErisNum::ErisNum cache          = ErisNum::ErisNum(0.0); // Offline-only currency: accumulates from Information (at least 170:1); buys offline-only upgrades and certain Supports/Glitches
 
     ErisNum::ErisNum allCreditProduced      = ErisNum::ErisNum(0.0);
@@ -54,20 +54,28 @@ struct GameState {
     double voidRate         = 0.0;
     int    finishedTutorial = 0;
 
-    // Owned / unlocked flags, positional per list (see Flags.hpp)
+    // Owned / unlocked flags, positional per list (see Flags.hpp). No 64-entry cap.
     std::vector<uint64_t> supportFlags;
     std::vector<uint64_t> marketFlags;
     std::vector<uint64_t> achievementFlags;
     std::vector<uint64_t> fragmentTreeFlags;
     std::vector<uint64_t> researchFlags;      // done techs (Research.hpp)
 
-    // Research in progress (index into researchTree, -1 = idle) and its progress
+    // Research in progress (index into researchTree, -1 = idle) and its progress.
     int32_t researchActive  = -1;
     double  researchElapsed = 0.0;
-    // Seconds remaining per Glitch, indexed like `glitches` (Glitches.hpp)
+    // Seconds remaining per Glitch, indexed like `glitches` (Glitches.hpp).
     std::vector<double> glitchTimers;
 
-    // Tab unlock latches — once true they stay true (see GameMechanics::updateUnlocks)
+    // Infrastructure (Infrastructure.hpp): size x size grid, 0 = empty else kind+1.
+    int32_t infraSize = 3;
+    std::vector<uint8_t> infraCells;
+    bool    autoSupports = false;                  // Autoloader on/off
+    std::vector<uint64_t> glitchAutoFlags;         // Glitch Scheduler: which Glitches to keep running
+    bool    infraUnlocked = false;
+    double  autoTimer = 0.0;                       // not saved
+
+    // Tab unlock latches — once true they stay true (see GameMechanics::updateUnlocks).
     bool marketUnlocked      = false;
     bool fragmentUnlocked    = false;
     bool researchUnlocked    = false;
@@ -96,7 +104,7 @@ struct GameState {
     ErisNum::ErisNum voidcoinUnits = ErisNum::ErisNum(0.0);
 
     // Price/range scale of the stock markets. Re-taken from lifetime earnings only when a
-    // run starts (Fragmentation), so held positions can't drift upward while you earn
+    // run starts (Fragmentation), so held positions can't drift upward while you earn.
     double stockScale          = 1.0;
 
     double stockMarketValueA   = 0.5;
@@ -174,6 +182,11 @@ SIMPLEDAT_SERIALIZER_BEGIN(GameState)
     SIMPLEDAT_FIELD_WRITE(researchActive)
     SIMPLEDAT_FIELD_WRITE(researchElapsed)
     SIMPLEDAT_FIELD_WRITE(glitchTimers)
+    SIMPLEDAT_FIELD_WRITE(infraSize)
+    SIMPLEDAT_FIELD_WRITE(infraCells)
+    SIMPLEDAT_FIELD_WRITE(autoSupports)
+    SIMPLEDAT_FIELD_WRITE(glitchAutoFlags)
+    SIMPLEDAT_FIELD_WRITE(infraUnlocked)
 
     SIMPLEDAT_FIELD_WRITE(pinCredits)
     SIMPLEDAT_FIELD_WRITE(pinData)
@@ -260,6 +273,11 @@ SIMPLEDAT_SERIALIZER_END(GameState)
     SIMPLEDAT_FIELD_READ(researchActive)
     SIMPLEDAT_FIELD_READ(researchElapsed)
     SIMPLEDAT_FIELD_READ(glitchTimers)
+    SIMPLEDAT_FIELD_READ(infraSize)
+    SIMPLEDAT_FIELD_READ(infraCells)
+    SIMPLEDAT_FIELD_READ(autoSupports)
+    SIMPLEDAT_FIELD_READ(glitchAutoFlags)
+    SIMPLEDAT_FIELD_READ(infraUnlocked)
 
     SIMPLEDAT_FIELD_READ(pinCredits)
     SIMPLEDAT_FIELD_READ(pinData)

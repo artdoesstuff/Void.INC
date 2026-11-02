@@ -26,6 +26,7 @@
 #include <vector>
 #include "Flags.hpp"
 #include "Glitches.hpp"
+#include "Infrastructure.hpp"
 #include "Supports.hpp"     // RESOURCE::COST + supportPool()
 
 enum class ResearchEffect {
@@ -122,7 +123,8 @@ inline bool startResearch(GS& gs, size_t i, std::vector<ResearchNode>& nodes = r
 
 template <typename GS>
 [[nodiscard]] inline double researchSpeed(const GS& gs) {
-    return researchProduct(ResearchEffect::RESEARCH_SPEED) * glitchMult(gs, GlitchEffect::RESEARCH_SPEED);
+    return researchProduct(ResearchEffect::RESEARCH_SPEED) * glitchMult(gs, GlitchEffect::RESEARCH_SPEED)
+         * infraMult(gs, InfraEffect::RESEARCH_SPEED);
 }
 
 /// [0,1] progress of the active research (0 when idle).

@@ -193,7 +193,6 @@ template <typename GS>
         case AchievementCondition::CONVERGENCE_COUNT:     return gs.convergence;
         case AchievementCondition::NULLIFICATION_COUNT:   return gs.nullification;
 
-        // ---- Trading ----
         case AchievementCondition::STOCK_PNL_TOTAL: {
             // Sum of all per-market P&L values that are currently positive.
             // P&L tracks net (sells - buys), so this approximates lifetime
