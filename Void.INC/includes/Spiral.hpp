@@ -40,7 +40,8 @@ inline void updateSpiral(Spiral& spiral,
                        sf::Vector2f centre,
                        float        time,
                        float        currentScale,
-                       long double  allDataProduced)
+                       long double  allDataProduced,
+                       sf::Color    tint = sf::Color(255, 255, 255))
 {
     constexpr int    numArms        = 16;
     constexpr size_t segmentsPerArm = 50;
@@ -56,8 +57,8 @@ inline void updateSpiral(Spiral& spiral,
     float logVal       = (allDataProduced > 1.0L) ? static_cast<float>(std::log10(allDataProduced)) : 0.f;
     float rotationSpeed = 0.4f + logVal * 0.02f;
 
-    // Single spiral colour — white
-    constexpr sf::Color spiralColour{255, 255, 255};
+    // Single spiral colour — white by default, or a Merchant cosmetic tint
+    const sf::Color spiralColour = tint;
 
     for (int arm = 0; arm < numArms; ++arm) {
         float armOffset = (arm * 2.f * pi) / static_cast<float>(numArms);

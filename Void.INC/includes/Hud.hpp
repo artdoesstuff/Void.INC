@@ -188,7 +188,6 @@ struct RateSmoother {
 
 class Hud {
 public:
-    // ---- Constants -------------------------------------------------------
     static constexpr float kScreenW      = 1280.f;
     static constexpr float kScreenH      = 720.f;
     static constexpr float kSpiralBound  = 640.f;  ///< Panel never crosses this X
@@ -245,6 +244,7 @@ public:
         drawPanel(gs);
         drawTree(gs);
         drawStatusOverlay(gs);
+        drawMerchant(gs);
         drawBottomBar(gs);
     }
 
@@ -273,6 +273,9 @@ public:
     [[nodiscard]] const Probe& probeInfraCell(size_t i) const { return i < probeInfraCells_.size() ? probeInfraCells_[i] : kNoProbe_; }
     [[nodiscard]] const Probe& probeInfraPalette(size_t k) const { return k < probeInfraPal_.size() ? probeInfraPal_[k] : kNoProbe_; }
     [[nodiscard]] const Probe& probeInfraExpand() const { return probeInfraExpand_; }
+    [[nodiscard]] const Probe& probeMerchantIcon() const { return probeMerchantIcon_; }
+    [[nodiscard]] const Probe& probeMerchantOffer(size_t i) const { return i < 3 ? probeMerchantOffer_[i] : kNoProbe_; }
+    [[nodiscard]] bool merchantOpen() const { return merchantOpen_; }
     [[nodiscard]] const Probe& probeResearch() const { return probeResearch_; }
     [[nodiscard]] const Probe& probeGlitch()   const { return probeGlitch_;   }
 
@@ -286,6 +289,9 @@ private:
     Probe probeConfirm_;
     Probe probePerk_;
     Probe probeResearch_;
+    Probe probeMerchantIcon_;
+    Probe probeMerchantOffer_[3];
+    bool  merchantOpen_ = false;
     std::vector<Probe> probeInfraCells_;
     std::vector<Probe> probeInfraPal_;
     Probe probeInfraExpand_;
@@ -864,6 +870,74 @@ private:
         for (size_t i = 0; i < glitches.size(); ++i)
             if (glitchActive(gs, i))
                 ImGui::TextColored(Palette::IV_Red, "%s  %s", glitches[i].name.c_str(), fmtClock(glitchRemaining(gs, i)).c_str());
+        ImGui::End();
+    }
+
+    void drawMerchant(GameState& gs) {
+        probeMerchantIcon_.valid = false;
+        for (Probe& p : probeMerchantOffer_) p.valid = false;
+        if (!gs.merchantPresent) merchantOpen_ = false;
+        if (treeOpen_ || !gs.marketUnlocked) return;     // appears together with the Market
+
+        constexpr float kIcon = 48.f;
+        ImGui::SetNextWindowPos({kSpiralBound - 10.f, kScreenH - kBottomBarH - 10.f}, ImGuiCond_Always, {1.f, 1.f});
+        ImGui::SetNextWindowBgAlpha(0.f);
+        ImGui::Begin("##merchanticon", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        const bool here = gs.merchantPresent;
+        if (!here) ImGui::BeginDisabled();
+        ImGui::PushStyleColor(ImGuiCol_Button, here ? Palette::IV_CyanDim : Palette::IV_Transparent);
+        if (ImGui::Button("$##merchant", {kIcon, kIcon})) merchantOpen_ = !merchantOpen_;
+        probeMerchantIcon_ = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+        ImGui::PopStyleColor();
+        if (!here) ImGui::EndDisabled();
+        if (here) ImGui::TextColored(Palette::IV_Gold, "%s", fmtClock(gs.merchantTimer).c_str());
+        else      ImGui::TextColored(Palette::IV_TextDim, "away");
+        ImGui::End();
+
+        if (!merchantOpen_ || !here) return;
+
+        ImGui::SetNextWindowPos({kSpiralBound * 0.5f, (kScreenH - kBottomBarH) * 0.5f}, ImGuiCond_Always, {0.5f, 0.5f});
+        ImGui::SetNextWindowSize({440.f, 330.f});
+        ImGui::SetNextWindowBgAlpha(0.92f);
+        ImGui::Begin("##merchant", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoSavedSettings);
+        ImGui::TextColored(Palette::IV_Gold, "// WANDERING MERCHANT");
+        ImGui::SameLine(0.f, 16.f);
+        ImGui::TextColored(Palette::IV_TextMid, "leaves in %s", fmtClock(gs.merchantTimer).c_str());
+        ImGui::TextColored(Palette::IV_Gold, "CREDITS  %s", gs.credits.toString(ErisNum::FormatMode::LatinShort, 2).c_str());
+        ImGui::Separator();
+        for (size_t s = 0; s < gs.merchantOffers.size() && s < 3; ++s) {
+            const uint8_t id = gs.merchantOffers[s];
+            const bool cosm  = id >= MerchantRules::kCosmeticBase;
+            const double cost = offerCost(gs, id);
+            ImGui::PushID(static_cast<int>(s));
+            if (cosm) {
+                const Cosmetic& c = cosmetics[id - MerchantRules::kCosmeticBase];
+                ImGui::TextColored(ImVec4(c.r / 255.f, c.g / 255.f, c.b / 255.f, 1.f), "%s", c.name.c_str());
+                ImGui::TextColored(Palette::IV_TextDim, "Cosmetic: recolours the spiral.");
+            } else {
+                const MerchantUpgrade& u = merchantUpgrades[id];
+                const int lv = id < gs.merchantLevels.size() ? gs.merchantLevels[id] : 0;
+                ImGui::TextColored(Palette::IV_Cyan, "%s  (lv %d/%d)", u.name.c_str(), lv, u.maxLevel);
+                ImGui::TextColored(Palette::IV_TextDim, "%s", u.desc.c_str());
+            }
+            const bool can = canBuyOffer(gs, s);
+            if (!can) ImGui::BeginDisabled();
+            char b[64];
+            std::snprintf(b, sizeof(b), "BUY  %s CR##offer",
+                ErisNum::ErisNum(cost).toString(ErisNum::FormatMode::LatinShort, 2).c_str());
+            if (ImGui::Button(b)) buyOffer(gs, s);
+            probeMerchantOffer_[s] = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+            if (!can) ImGui::EndDisabled();
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+        if (gs.merchantOffers.empty()) ImGui::TextColored(Palette::IV_TextDim, "Sold out. He will be gone soon.");
+        if (ImGui::Button("CLOSE##merchant")) merchantOpen_ = false;
         ImGui::End();
     }
 

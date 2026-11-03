@@ -99,7 +99,12 @@ int main() {
         float logVal      = GameMechanics::dataLog10Float(gs);
         float targetScale = 0.8f + std::min(logVal / 99.f, 1.f) * 0.2f;
         long double allDataLD = static_cast<long double>(gs.allDataProduced.toDouble());
-        updateSpiral(spiral, spiralCentre, elapsed, targetScale, allDataLD);
+        sf::Color tint(255, 255, 255);
+        if (gs.cosmeticEquipped >= 0 && gs.cosmeticEquipped < static_cast<int32_t>(cosmetics.size())) {
+            const Cosmetic& cs = cosmetics[static_cast<size_t>(gs.cosmeticEquipped)];
+            tint = sf::Color(cs.r, cs.g, cs.b);
+        }
+        updateSpiral(spiral, spiralCentre, elapsed, targetScale, allDataLD, tint);
 
         // -- ImGui frame ----------------------------------------------------
         ImGui::SFML::Update(window, sfDt);

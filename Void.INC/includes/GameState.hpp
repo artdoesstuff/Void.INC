@@ -10,7 +10,7 @@ struct GameState {
     // live save; GameMechanics::loadOrNew quarantines it instead.
     // Bump kSaveVersion whenever the field list or flag ordering changes.
     static constexpr uint32_t kSaveMagic   = 0x44494F56u; // "VOID"
-    static constexpr uint32_t kSaveVersion = 5u;
+    static constexpr uint32_t kSaveVersion = 6u;
     uint32_t saveMagic   = kSaveMagic;
     uint32_t saveVersion = kSaveVersion;
 
@@ -74,6 +74,14 @@ struct GameState {
     std::vector<uint64_t> glitchAutoFlags;         // Glitch Scheduler: which Glitches to keep running
     bool    infraUnlocked = false;
     double  autoTimer = 0.0;                       // not saved
+
+    // Merchant (Merchant.hpp)
+    bool    merchantPresent = false;
+    double  merchantTimer   = 0.0;                 // until arrival, or until he leaves
+    std::vector<uint8_t>  merchantOffers;          // current stock (offer ids)
+    std::vector<uint8_t>  merchantLevels;          // per upgrade
+    std::vector<uint64_t> cosmeticFlags;           // owned cosmetics
+    int32_t cosmeticEquipped = -1;
 
     // Tab unlock latches — once true they stay true (see GameMechanics::updateUnlocks).
     bool marketUnlocked      = false;
@@ -187,6 +195,12 @@ SIMPLEDAT_SERIALIZER_BEGIN(GameState)
     SIMPLEDAT_FIELD_WRITE(autoSupports)
     SIMPLEDAT_FIELD_WRITE(glitchAutoFlags)
     SIMPLEDAT_FIELD_WRITE(infraUnlocked)
+    SIMPLEDAT_FIELD_WRITE(merchantPresent)
+    SIMPLEDAT_FIELD_WRITE(merchantTimer)
+    SIMPLEDAT_FIELD_WRITE(merchantOffers)
+    SIMPLEDAT_FIELD_WRITE(merchantLevels)
+    SIMPLEDAT_FIELD_WRITE(cosmeticFlags)
+    SIMPLEDAT_FIELD_WRITE(cosmeticEquipped)
 
     SIMPLEDAT_FIELD_WRITE(pinCredits)
     SIMPLEDAT_FIELD_WRITE(pinData)
@@ -278,6 +292,12 @@ SIMPLEDAT_SERIALIZER_END(GameState)
     SIMPLEDAT_FIELD_READ(autoSupports)
     SIMPLEDAT_FIELD_READ(glitchAutoFlags)
     SIMPLEDAT_FIELD_READ(infraUnlocked)
+    SIMPLEDAT_FIELD_READ(merchantPresent)
+    SIMPLEDAT_FIELD_READ(merchantTimer)
+    SIMPLEDAT_FIELD_READ(merchantOffers)
+    SIMPLEDAT_FIELD_READ(merchantLevels)
+    SIMPLEDAT_FIELD_READ(cosmeticFlags)
+    SIMPLEDAT_FIELD_READ(cosmeticEquipped)
 
     SIMPLEDAT_FIELD_READ(pinCredits)
     SIMPLEDAT_FIELD_READ(pinData)

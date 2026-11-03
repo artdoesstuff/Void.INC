@@ -53,6 +53,7 @@ namespace GameMechanics {
         return base * supportBoost(RESOURCE::BOOST::DATA)
                     * ErisNum::ErisNum(glitchMult(gs, GlitchEffect::DATA_PROD))
                     * ErisNum::ErisNum(infraMult(gs, InfraEffect::DATA_PROD))
+                    * ErisNum::ErisNum(merchantMult(gs, MerchantEffect::DATA_PROD))
                     * ErisNum::ErisNum(static_cast<double>(dataProdPerkMult()))
                     * ErisNum::ErisNum(treeDataMult())
                     * fragmentBoost(gs);
@@ -84,6 +85,7 @@ namespace GameMechanics {
 
         tickGlitches(gs, dt);
         tickResearch(gs, dt);
+        tickMerchant(gs, dt);
         gs.autoTimer += dt;
         if (gs.autoTimer >= InfraRules::AUTO_PERIOD) { gs.autoTimer = 0.0; runAutomation(gs); }
 
@@ -101,6 +103,7 @@ namespace GameMechanics {
         ErisNum::ErisNum grossInfo = converted * supportBoost(RESOURCE::BOOST::INFORMATION)
                                                 * ErisNum::ErisNum(glitchMult(gs, GlitchEffect::INFO_PROD))
                                                 * ErisNum::ErisNum(infraMult(gs, InfraEffect::INFO_PROD))
+                                                * ErisNum::ErisNum(merchantMult(gs, MerchantEffect::INFO_PROD))
                                                 * ErisNum::ErisNum(static_cast<double>(infoProdPerkMult()))
                                                 * ErisNum::ErisNum(treeInfoMult());
 
@@ -120,6 +123,7 @@ namespace GameMechanics {
             // recovered from the intercepted slice.
             ErisNum::ErisNum entropyGain = intercepted * ErisNum::ErisNum(0.2) * supportBoost(RESOURCE::BOOST::ENTROPY)
                                                         * ErisNum::ErisNum(infraMult(gs, InfraEffect::ENTROPY_PROD))
+                                                        * ErisNum::ErisNum(merchantMult(gs, MerchantEffect::ENTROPY_PROD))
                                                         * ErisNum::ErisNum(static_cast<double>(entropyProdPerkMult()))
                                                         * ErisNum::ErisNum(treeEntropyMult());
             gs.entropy              += entropyGain;
@@ -197,6 +201,7 @@ namespace GameMechanics {
         gs.voidRate = std::clamp(gs.voidRate, 0.0, VOID_RATE_HARD_MAX);
         if (!std::isfinite(gs.stockScale) || gs.stockScale < 1.0) gs.stockScale = 1.0;
         ensureInfraGrid(gs);
+        ensureMerchantState(gs);
         ensureGlitchTimers(gs);
         for (double& t : gs.glitchTimers)
             if (!std::isfinite(t) || t < 0.0) t = 0.0;

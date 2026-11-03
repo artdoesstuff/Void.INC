@@ -33,7 +33,7 @@
 #include "FragmentTree.hpp"
 #include "Research.hpp"
 
-// Forward declaration — GameState included by whoever calls market.update()
+// Forward declaration — GameState included by whoever calls market.update().
 struct GameState;
 
 inline constexpr float  MARKET_TICK_INTERVAL = 1.f;   // seconds between price moves
@@ -259,7 +259,7 @@ struct CreditMarket {
              * static_cast<double>(dataSeries.multiplier())
              * Economy::SELL_DATA_BASE
              * static_cast<double>(dataSellValuePerkMult())
-             * treeSellMult() * researchSellMult() * infraMult(gs, InfraEffect::SELL_VALUE);
+             * treeSellMult() * researchSellMult() * infraMult(gs, InfraEffect::SELL_VALUE) * merchantMult(gs, MerchantEffect::SELL_VALUE);
     }
 
     template <typename GS>
@@ -270,7 +270,7 @@ struct CreditMarket {
              * static_cast<double>(infoSeries.multiplier())
              * Economy::SELL_INFO_BASE
              * static_cast<double>(infoSellValuePerkMult())
-             * treeSellMult() * researchSellMult() * infraMult(gs, InfraEffect::SELL_VALUE);
+             * treeSellMult() * researchSellMult() * infraMult(gs, InfraEffect::SELL_VALUE) * merchantMult(gs, MerchantEffect::SELL_VALUE);
     }
 
     template <typename GS>
@@ -421,7 +421,7 @@ struct CreditMarket {
 template <typename GS>
 [[nodiscard]] inline bool tradeValueReachesOneCredit(const GS& gs) {
     const double vol  = static_cast<double>(marketVolCapPerkMult());
-    const double tree = treeSellMult() * researchSellMult() * infraMult(gs, InfraEffect::SELL_VALUE);
+    const double tree = treeSellMult() * researchSellMult() * infraMult(gs, InfraEffect::SELL_VALUE) * merchantMult(gs, MerchantEffect::SELL_VALUE);
     const double ceil = researchCeilMult();
     const double sell = static_cast<double>(CreditMarket::sellMax());
     const double dataBest = gs.data.toDouble()        * sell * (1.0 + 2.0 * vol * ceil)
