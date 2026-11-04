@@ -276,6 +276,8 @@ public:
     [[nodiscard]] const Probe& probeMerchantIcon() const { return probeMerchantIcon_; }
     [[nodiscard]] const Probe& probeMerchantOffer(size_t i) const { return i < 3 ? probeMerchantOffer_[i] : kNoProbe_; }
     [[nodiscard]] bool merchantOpen() const { return merchantOpen_; }
+    [[nodiscard]] const Probe& probeQABuy() const { return probeQABuy_; }
+    [[nodiscard]] const Probe& probeQAFloorUp() const { return probeQAFloorUp_; }
     [[nodiscard]] const Probe& probeResearch() const { return probeResearch_; }
     [[nodiscard]] const Probe& probeGlitch()   const { return probeGlitch_;   }
 
@@ -289,6 +291,8 @@ private:
     Probe probeConfirm_;
     Probe probePerk_;
     Probe probeResearch_;
+    Probe probeQABuy_;
+    Probe probeQAFloorUp_;
     Probe probeMerchantIcon_;
     Probe probeMerchantOffer_[3];
     bool  merchantOpen_ = false;
@@ -721,7 +725,7 @@ private:
     }
 
     void drawUpgradesContent(GameState& gs) {
-        if (!gs.researchUnlocked && !gs.glitchUnlocked) { drawSupportGrid(gs); return; }
+        if (!gs.researchUnlocked && !gs.glitchUnlocked && !gs.qaUnlocked) { drawSupportGrid(gs); return; }
 
         if (ImGui::BeginTabBar("##suptabs")) {
             if (ImGui::BeginTabItem("UPGRADES", nullptr, (supportTabRequest_ == 0) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
@@ -736,6 +740,11 @@ private:
             if (gs.glitchUnlocked &&
                 ImGui::BeginTabItem("GLITCHES", nullptr, (supportTabRequest_ == 2) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
                 drawGlitchContent(gs);
+                ImGui::EndTabItem();
+            }
+            if (gs.qaUnlocked &&
+                ImGui::BeginTabItem("QUALITY", nullptr, (supportTabRequest_ == 3) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
+                drawQualityContent(gs);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -813,6 +822,53 @@ private:
                     ImGui::SameLine(0.f, 10.f);
                     ImGui::TextColored(Palette::IV_TextDim, "%s", n.desc.c_str());
                 }
+        }
+    }
+
+    void drawQualityContent(GameState& gs) {
+        ImGui::TextWrapped("Everything produced is scaled by quality / 50 (50%% = x1). Quality drifts around a mean you raise with Credits. "
+                           "While quality is BELOW your floor, production is not banked: it becomes a little Entropy instead.");
+        ImGui::TextColored(Palette::IV_Gold, "CREDITS  %s", gs.credits.toString(ErisNum::FormatMode::LatinShort, 2).c_str());
+        ImGui::Separator();
+        probeQABuy_.valid = false; probeQAFloorUp_.valid = false;
+        for (int pass = 0; pass < 2; ++pass) {
+            const bool info = pass == 1;
+            const double q   = info ? gs.qaQualInfo : gs.qaQualData;
+            const int lv     = info ? gs.qaLevelInfo : gs.qaLevelData;
+            const int floor_ = info ? gs.qaFloorInfo : gs.qaFloorData;
+            const ImVec4 acc = info ? Palette::IV_Purple : Palette::IV_Cyan;
+            ImGui::PushID(pass);
+            ImGui::TextColored(acc, "%s QUALITY", info ? "INFORMATION" : "DATA");
+            ImGui::SameLine(0.f, 14.f);
+            ImGui::TextColored(Palette::IV_TextDim, "mean %.0f%%  level %d/%d", qaMean(lv), lv, QA::MAX_LEVEL);
+            char ov[64];
+            if (qaConverting(gs, info)) std::snprintf(ov, sizeof(ov), "%.0f%%  -  below floor: becoming Entropy", q);
+            else                        std::snprintf(ov, sizeof(ov), "%.0f%%  (x%.2f)", q, q / QA::BASE_MEAN);
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, qaConverting(gs, info) ? Palette::IV_Red : acc);
+            ImGui::ProgressBar(static_cast<float>(std::min(q, 100.0) / 100.0), {-1.f, 0.f}, ov);
+            ImGui::PopStyleColor();
+
+            ImGui::TextColored(Palette::IV_TextMid, "FLOOR %d%%", floor_);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-##floor")) stepQAFloor(gs, info, -1);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+##floor")) stepQAFloor(gs, info, +1);
+            if (pass == 0) probeQAFloorUp_ = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+
+            const bool can = canBuyQA(gs, info);
+            if (lv >= QA::MAX_LEVEL) {
+                ImGui::TextColored(Palette::IV_TextDim, "Max level.");
+            } else {
+                if (!can) ImGui::BeginDisabled();
+                char b[64];
+                std::snprintf(b, sizeof(b), "RAISE MEAN +%.0f%%  -  %s CR##qa", QA::MEAN_PER_LEVEL,
+                    ErisNum::ErisNum(qaUpgradeCost(lv)).toString(ErisNum::FormatMode::LatinShort, 2).c_str());
+                if (ImGui::Button(b)) buyQA(gs, info);
+                if (pass == 0) probeQABuy_ = { ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true };
+                if (!can) ImGui::EndDisabled();
+            }
+            ImGui::Separator();
+            ImGui::PopID();
         }
     }
 

@@ -5,6 +5,7 @@
 #include <ctime>
 #include <filesystem>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include "GameState.hpp"
@@ -15,6 +16,7 @@
 #include "Research.hpp"
 #include "Glitches.hpp"
 #include "Infrastructure.hpp"
+#include "Quality.hpp"
 #include "CreditMarket.hpp"
 
 namespace GameMechanics {
@@ -80,6 +82,11 @@ namespace GameMechanics {
         }
     }
 
+    [[nodiscard]] inline std::mt19937& qaRng() {
+        static std::mt19937 rng{ std::random_device{}() };
+        return rng;
+    }
+
     inline void tick(GameState& gs, double dt) {
         if (dt <= 0.0) return;
 
@@ -89,7 +96,16 @@ namespace GameMechanics {
         gs.autoTimer += dt;
         if (gs.autoTimer >= InfraRules::AUTO_PERIOD) { gs.autoTimer = 0.0; runAutomation(gs); }
 
-        ErisNum::ErisNum produced = dataRate(gs) * ErisNum::ErisNum(dt);
+        tickQuality(gs, dt, qaRng());
+
+        // Quality Assurance: banked Data is scaled by quality/50, or turned into
+        // a little Entropy while quality is below the player's floor.
+        const ErisNum::ErisNum raw = dataRate(gs) * ErisNum::ErisNum(dt);
+        ErisNum::ErisNum produced = raw * ErisNum::ErisNum(qaMultiplier(gs, false));
+        if (qaConverting(gs, false)) {
+            const ErisNum::ErisNum e = raw * ErisNum::ErisNum(QA::ENTROPY_PER_DATA);
+            gs.entropy += e; gs.allEntropyProduced += e;
+        }
         gs.data              += produced;
         gs.allDataProduced   += produced;
         gs.runDataProduced   += produced;
@@ -99,13 +115,20 @@ namespace GameMechanics {
         // this — it is a deliberate split of the same production, not a
         // conversion cost. INFORMATION supports/perks/tree boost only the
         // Information side.
-        ErisNum::ErisNum converted = produced * ErisNum::ErisNum(0.5);
+        ErisNum::ErisNum converted = raw * ErisNum::ErisNum(0.5);
         ErisNum::ErisNum grossInfo = converted * supportBoost(RESOURCE::BOOST::INFORMATION)
                                                 * ErisNum::ErisNum(glitchMult(gs, GlitchEffect::INFO_PROD))
                                                 * ErisNum::ErisNum(infraMult(gs, InfraEffect::INFO_PROD))
                                                 * ErisNum::ErisNum(merchantMult(gs, MerchantEffect::INFO_PROD))
                                                 * ErisNum::ErisNum(static_cast<double>(infoProdPerkMult()))
                                                 * ErisNum::ErisNum(treeInfoMult());
+        if (qaConverting(gs, true)) {
+            const ErisNum::ErisNum e = grossInfo * ErisNum::ErisNum(QA::ENTROPY_PER_INFO);
+            gs.entropy += e; gs.allEntropyProduced += e;
+            grossInfo = ErisNum::ErisNum(0.0);
+        } else {
+            grossInfo = grossInfo * ErisNum::ErisNum(qaMultiplier(gs, true));
+        }
 
         // The void intercepts a voidRate fraction of THIS TICK'S incoming
         // Information before it's banked — it no longer drains the existing
@@ -202,6 +225,7 @@ namespace GameMechanics {
         if (!std::isfinite(gs.stockScale) || gs.stockScale < 1.0) gs.stockScale = 1.0;
         ensureInfraGrid(gs);
         ensureMerchantState(gs);
+        ensureQA(gs);
         ensureGlitchTimers(gs);
         for (double& t : gs.glitchTimers)
             if (!std::isfinite(t) || t < 0.0) t = 0.0;
@@ -226,6 +250,7 @@ namespace GameMechanics {
             (canFragment(gs) || gs.allDataFragments > zero || gs.fragmentation > zero))
             gs.fragmentUnlocked = true;
 
+        if (!gs.qaUnlocked && gs.fragmentation > zero) gs.qaUnlocked = true;
         if (!gs.infraUnlocked && infraWorthShowing(gs)) gs.infraUnlocked = true;
 
         // Research: something to research is affordable (or already underway/done).

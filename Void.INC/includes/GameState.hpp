@@ -6,11 +6,12 @@
 #include "dependancies/SimpleDat.hpp"
 
 struct GameState {
+    // ---- Save header -----------------------------------------------------
     // Written first. A file whose magic/version differ is never loaded as a
     // live save; GameMechanics::loadOrNew quarantines it instead.
     // Bump kSaveVersion whenever the field list or flag ordering changes.
     static constexpr uint32_t kSaveMagic   = 0x44494F56u; // "VOID"
-    static constexpr uint32_t kSaveVersion = 6u;
+    static constexpr uint32_t kSaveVersion = 7u;
     uint32_t saveMagic   = kSaveMagic;
     uint32_t saveVersion = kSaveVersion;
 
@@ -82,6 +83,12 @@ struct GameState {
     std::vector<uint8_t>  merchantLevels;          // per upgrade
     std::vector<uint64_t> cosmeticFlags;           // owned cosmetics
     int32_t cosmeticEquipped = -1;
+
+    // Quality Assurance (Quality.hpp)
+    bool    qaUnlocked  = false;
+    int32_t qaLevelData = 0, qaLevelInfo = 0;
+    int32_t qaFloorData = 0, qaFloorInfo = 0;      // % — below this, production becomes Entropy
+    double  qaQualData  = 50.0, qaQualInfo = 50.0; // live quality %
 
     // Tab unlock latches — once true they stay true (see GameMechanics::updateUnlocks).
     bool marketUnlocked      = false;
@@ -201,6 +208,13 @@ SIMPLEDAT_SERIALIZER_BEGIN(GameState)
     SIMPLEDAT_FIELD_WRITE(merchantLevels)
     SIMPLEDAT_FIELD_WRITE(cosmeticFlags)
     SIMPLEDAT_FIELD_WRITE(cosmeticEquipped)
+    SIMPLEDAT_FIELD_WRITE(qaUnlocked)
+    SIMPLEDAT_FIELD_WRITE(qaLevelData)
+    SIMPLEDAT_FIELD_WRITE(qaLevelInfo)
+    SIMPLEDAT_FIELD_WRITE(qaFloorData)
+    SIMPLEDAT_FIELD_WRITE(qaFloorInfo)
+    SIMPLEDAT_FIELD_WRITE(qaQualData)
+    SIMPLEDAT_FIELD_WRITE(qaQualInfo)
 
     SIMPLEDAT_FIELD_WRITE(pinCredits)
     SIMPLEDAT_FIELD_WRITE(pinData)
@@ -298,6 +312,13 @@ SIMPLEDAT_SERIALIZER_END(GameState)
     SIMPLEDAT_FIELD_READ(merchantLevels)
     SIMPLEDAT_FIELD_READ(cosmeticFlags)
     SIMPLEDAT_FIELD_READ(cosmeticEquipped)
+    SIMPLEDAT_FIELD_READ(qaUnlocked)
+    SIMPLEDAT_FIELD_READ(qaLevelData)
+    SIMPLEDAT_FIELD_READ(qaLevelInfo)
+    SIMPLEDAT_FIELD_READ(qaFloorData)
+    SIMPLEDAT_FIELD_READ(qaFloorInfo)
+    SIMPLEDAT_FIELD_READ(qaQualData)
+    SIMPLEDAT_FIELD_READ(qaQualInfo)
 
     SIMPLEDAT_FIELD_READ(pinCredits)
     SIMPLEDAT_FIELD_READ(pinData)
